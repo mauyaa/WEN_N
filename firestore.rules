@@ -1,0 +1,131 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - User's unique ID
+    //   - email: string (optional) - User's email
+    //   - balance: number (required) - Current wallet balance in USD
+    //   - isTradingEnabled: boolean (required) - Bot status
+    //   - createdAt: timestamp (optional) - When the user signed up
+    //
+    // Collection: positions
+    // Document ID: {positionId}
+    // Fields:
+    //   - userId: string (required) - Owner of the position
+    //   - coin: string (required) - BTC, ETH, SOL
+    //   - type: string (required) - LONG, SHORT
+    //   - entryPrice: number (required) - Price at entry
+    //   - amount: number (required) - Position size in USD
+    //   - leverage: number (optional) - Leverage used
+    //   - openedAt: timestamp (required) - When the position was opened
+    //
+    // Collection: history
+    // Document ID: {historyId}
+    // Fields:
+    //   - userId: string (required) - Owner of the trade
+    //   - coin: string (required) - Coin traded
+    //   - type: string (required) - LONG, SHORT
+    //   - entryPrice: number (required) - Price at entry
+    //   - exitPrice: number (required) - Price at exit
+    //   - profit: number (required) - Profit in USD
+    //   - closedAt: timestamp (required) - When the position was closed
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isNewDocOwner() {
+      return isAuthenticated() && request.auth.uid == request.resource.data.userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "mauyabevan@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'balance', 'isTradingEnabled', 'createdAt', 'role']) &&
+             data.uid == request.auth.uid &&
+             data.balance is number && data.balance >= 0 &&
+             data.isTradingEnabled is bool;
+    }
+
+    function isValidPosition(data) {
+      return hasOnlyAllowedFields(['userId', 'coin', 'type', 'entryPrice', 'amount', 'leverage', 'openedAt']) &&
+             data.userId == request.auth.uid &&
+             data.coin in ['BTC', 'ETH', 'SOL'] &&
+             data.type in ['LONG', 'SHORT'] &&
+             data.entryPrice is number && data.entryPrice > 0 &&
+             data.amount is number && data.amount > 0;
+    }
+
+    function isValidHistory(data) {
+      return hasOnlyAllowedFields(['userId', 'coin', 'type', 'entryPrice', 'exitPrice', 'profit', 'closedAt']) &&
+             data.userId == request.auth.uid &&
+             data.profit is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    (!('role' in request.resource.data) || request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /positions/{positionId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isNewDocOwner() && isValidPosition(request.resource.data);
+      allow update: if isDocOwner() && isValidPosition(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /history/{historyId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isNewDocOwner() && isValidHistory(request.resource.data);
+      allow update: if false; // History should be immutable
+      allow delete: if isAdmin();
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

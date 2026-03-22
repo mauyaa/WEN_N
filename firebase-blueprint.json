@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user balance and trading settings.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "balance": { "type": "number", "description": "Current wallet balance in USD" },
+        "isTradingEnabled": { "type": "boolean", "description": "Whether the Wenn bot is active" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "balance", "isTradingEnabled"]
+    },
+    "Position": {
+      "title": "Active Position",
+      "description": "A currently open trade by the Wenn bot.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "coin": { "type": "string", "enum": ["BTC", "ETH", "SOL"] },
+        "type": { "type": "string", "enum": ["LONG", "SHORT"] },
+        "entryPrice": { "type": "number" },
+        "amount": { "type": "number" },
+        "leverage": { "type": "number" },
+        "openedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "coin", "type", "entryPrice", "amount"]
+    },
+    "TradeHistory": {
+      "title": "Trade History",
+      "description": "Completed trades and their outcomes.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "coin": { "type": "string" },
+        "type": { "type": "string" },
+        "entryPrice": { "type": "number" },
+        "exitPrice": { "type": "number" },
+        "profit": { "type": "number" },
+        "closedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "coin", "profit", "closedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile and balance"
+    },
+    "/positions/{positionId}": {
+      "schema": "Position",
+      "description": "Active trading positions"
+    },
+    "/history/{historyId}": {
+      "schema": "TradeHistory",
+      "description": "Past trade records"
+    }
+  }
+}
